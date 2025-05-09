@@ -1,4 +1,4 @@
-use mesh_tools::{GltfBuilder, material, Triangle, Primitive};
+use mesh_tools::{GltfBuilder, Triangle};
 use nalgebra::{Point3, Vector3};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -68,10 +68,10 @@ impl TreeGenerator {
 /// 
 /// Tuple containing (vertices, indices, normals, uvs) where:
 /// - vertices is a Vec<Point3<f32>>
-/// - indices is a Vec<Primitive>
+/// - indices is a Vec<Triangle>
 /// - normals is a Vec<Vector3<f32>>
 /// - uvs is a Vec<[f32; 2]>
-pub fn branch_maker(start_radius: f32, end_radius: f32, height: f32, height_segments: u32, radial_segments: u32, noise_level: f32) -> (Vec<Point3<f32>>, Vec<Primitive>, Vec<Vector3<f32>>, Vec<[f32; 2]>) {
+pub fn branch_maker(start_radius: f32, end_radius: f32, height: f32, height_segments: u32, radial_segments: u32, noise_level: f32) -> (Vec<Point3<f32>>, Vec<Triangle>, Vec<Vector3<f32>>, Vec<[f32; 2]>) {
     let radial_segments = radial_segments.max(3); // Minimum 3 segments
     let noise_level = noise_level.max(0.0).min(1.0); // Clamp noise level between 0 and 1
     
@@ -140,10 +140,10 @@ pub fn branch_maker(start_radius: f32, end_radius: f32, height: f32, height_segm
             let next_up = next_section_start + (segment + 1) % radial_segments;
             
             // First triangle
-            indices.push(Primitive::Triangle(current as u32, next as u32, current_up as u32));
+            indices.push(Triangle::new(current as u32, next as u32, current_up as u32));
             
             // Second triangle
-            indices.push(Primitive::Triangle(next as u32, next_up as u32, current_up as u32));
+            indices.push(Triangle::new(next as u32, next_up as u32, current_up as u32));
         }
     }
     
@@ -155,7 +155,7 @@ pub fn branch_maker(start_radius: f32, end_radius: f32, height: f32, height_segm
         let current = segment;
         let next = (segment + 1) % radial_segments;
         
-        indices.push(Primitive::Triangle::new(bottom_center_idx, current as u32, next as u32));
+        indices.push(Triangle::new(bottom_center_idx, current as u32, next as u32));
     }
     
     // Add cap for the top
@@ -167,7 +167,7 @@ pub fn branch_maker(start_radius: f32, end_radius: f32, height: f32, height_segm
         let current = top_start + segment;
         let next = top_start + (segment + 1) % radial_segments;
         
-        indices.push(Primitive::Triangle(top_center_idx, next as u32, current as u32));
+        indices.push(Triangle::new(top_center_idx, next as u32, current as u32));
     }
     
     (vertices, indices, normals, uvs)
@@ -184,17 +184,28 @@ pub fn generate_tree(
     let trunk_material = generator.create_trunk_material();
     let leaves_material = generator.create_leaf_material([0.1, 0.6, 0.1, 1.0]); // Green
     
+    // Create a root node for the tree
+    let root_node = generator.builder.add_node(
+        Some("Tree".to_string()),
+        None,
+        None,
+        None,
+        None
+    );
+    
     // Start recursive branch generation from the trunk
     generate_branch_hierarchy(
         &mut generator, 
         &config, 
-        None, // No parent for the trunk
+        Some(root_node), // Root node as parent
         Point3::new(0.0, 0.0, 0.0), // Root position
         trunk_material,
         leaves_material,
         0 // Level 0 = trunk
     );
     
+    // Create a scene with the root node
+    generator.builder.add_scene(Some("Tree".to_string()), Some(vec![root_node]));
     
     // Use the provided output path or default to "tree.glb"
     let output = match output_path {
@@ -210,23 +221,16 @@ pub fn generate_tree(
 
 /// Recursively generate branch hierarchy based on the BranchConfig
 fn generate_branch_hierarchy(
-    /// tree generator
     generator: &mut TreeGenerator,
-    /// current branch config
     config: &BranchConfig,
-    /// parent node of the current branch
     parent_node: Option<usize>,
-    /// position of the current branch
-    /// TODO: instead of position, provide a list of points defining the center of the parent branch
     position: Point3<f32>,
-    /// material for the trunk and leaves
     trunk_material: usize,
     leaves_material: usize,
-    /// level of the current branch
     level: u32,
 )  {
     // Generate branch mesh using branch_maker
-    let (vertices, triangles, normals, uvs) = branch_maker(
+    let (vertices, indices, normals, uvs) = branch_maker(
         config.radius, 
         config.radius * config.taper, 
         config.length, 
@@ -235,14 +239,15 @@ fn generate_branch_hierarchy(
         config.gnarliness
     );
     
-    // Add mesh to the builder
-    let mesh_id = generator.builder.create_simple_mesh(
-        Some(format!("Mesh_{}", level)), 
-        &vertices,
-        &triangles,
-        &normals,
-        &uvs,
-        Some(trunk_material),
+    // Create cylinder mesh using the vertices and triangles directly
+    let mesh_id = generator.builder.create_cylinder(
+        config.radius * config.taper, // Top radius
+        config.radius,               // Bottom radius
+        config.length,               // Height
+        12,                          // Radial segments
+        config.segments as usize,    // Height segments
+        false,                       // Not open-ended
+        Some(trunk_material)         // Material
     );
     
     // Create node for this branch
@@ -293,7 +298,7 @@ fn generate_branch_hierarchy(
                 );
                 
                 // Recursively create this child branch and its descendants
-                let (child_node, grandchild_nodes) = generate_branch_hierarchy(
+                generate_branch_hierarchy(
                     generator,
                     &child_branch_config,
                     Some(branch_node),
