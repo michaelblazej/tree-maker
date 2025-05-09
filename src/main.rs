@@ -3,8 +3,8 @@ use std::error::Error;
 use std::path::PathBuf;
 
 // Import from library interface
-use tree_maker::tree::{generate_oak_tree, generate_pine_tree, generate_willow_tree, generate_palm_tree};
-use tree_maker::config::{read_config_from_file, get_trunk_config};
+use tree_maker::tree::generate_tree;
+use tree_maker::config::{read_config_from_file, get_branch_config};
 
 /// A Rust library and CLI tool for generating 3D tree models
 #[derive(Parser)]
