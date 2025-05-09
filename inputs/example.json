@@ -1,82 +1,54 @@
 {
-    "seed": 12345,
-    "type": "Deciduous",
-    "bark": {
-      "type": "Oak",
-      "tint": 16777215,
-      "flatShading": false,
-      "textured": true,
-      "textureScale": {
-        "x": 1.0,
-        "y": 1.0
-      }
-    },
-    "branch": {
-      "levels": 3,
-      "angle": {
-        "0": 30,
-        "1": 25,
-        "2": 20
-      },
-      "children": {
-        "0": 3,
-        "1": 2,
-        "2": 1
-      },
-      "force": {
-        "direction": {
-          "x": 0,
-          "y": 1,
-          "z": 0
-        },
-        "strength": 0.5
-      },
-      "gnarliness": {
-        "0": 0.2,
-        "1": 0.3,
-        "2": 0.4
-      },
-      "length": {
-        "0": 5.0,
-        "1": 3.5,
-        "2": 2.0
-      },
-      "radius": {
-        "0": 0.5,
-        "1": 0.3,
-        "2": 0.1
-      },
-      "sections": {
-        "0": 5,
-        "1": 4,
-        "2": 3
-      },
-      "segments": 8,
-      "start": {
-        "0": 0.0,
-        "1": 0.3,
-        "2": 0.6
-      },
-      "taper": {
-        "0": 0.8,
-        "1": 0.7,
-        "2": 0.6
-      },
-      "twist": {
-        "0": 10,
-        "1": 15,
-        "2": 20
-      }
-    },
-    "leaves": {
-      "type": "Oak",
-      "billboard": "Double",
-      "angle": 45,
-      "count": 500,
-      "start": 0.7,
-      "size": 0.2,
-      "sizeVariance": 0.05,
-      "tint": 65280,
-      "alphaTest": 0.5
+  "seed": 12345,
+  "type": "Deciduous",
+  "bark": {
+    "type": "Oak",
+    "tint": 16777215,
+    "flatShading": false,
+    "textured": true,
+    "textureScale": {
+      "x": 1.0,
+      "y": 1.0
     }
+  },
+  "trunk": {
+    "length": 5.0,
+    "radius": 0.5,
+    "segments": 8,
+    "angle": 0.0,
+    "taper": 0.8,
+    "twist": 0.0,
+    "gnarliness": 0.0,
+    "children": 4,
+    "children_config": {
+      "length": 3.5,
+      "radius": 0.3,
+      "segments": 6,
+      "angle": 30.0,
+      "taper": 0.7,
+      "twist": 10.0,
+      "gnarliness": 0.2,
+      "children": 3,
+      "children_config": {
+        "length": 2.0,
+        "radius": 0.15,
+        "segments": 5,
+        "angle": 45.0,
+        "taper": 0.6,
+        "twist": 15.0,
+        "gnarliness": 0.3,
+        "children": 2,
+        "children_config": {
+          "length": 1.0,
+          "radius": 0.07,
+          "segments": 4,
+          "angle": 60.0,
+          "taper": 0.5,
+          "twist": 20.0,
+          "gnarliness": 0.4,
+          "children": 0
+        }
+      }
+    }
+  }
 }

@@ -14,5 +14,5 @@ pub struct BranchConfig {
     pub twist: f32,
     pub gnarliness: f32,
     pub children: u32,
-    pub children_config: Option<BranchConfig>,
+    pub children_config: Option<Box<BranchConfig>>,
 }
