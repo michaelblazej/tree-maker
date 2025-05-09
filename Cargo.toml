@@ -1,0 +1,34 @@
+[package]
+name = "tree-maker"
+version = "0.1.0"
+edition = "2021"
+authors = ["Michael Blazej"]
+description = "A Rust library and CLI tool for generating 3D tree models"
+readme = "README.md"
+license = "MIT"
+# Enable both library and binary targets
+
+# Define library target
+[lib]
+name = "tree_maker"
+path = "src/lib.rs"
+doctest = true
+
+# Define binary target
+[[bin]]
+name = "tree-maker"
+path = "src/main.rs"
+
+[dependencies]
+# 3D mesh generation
+mesh-tools = { path = "../mesh-tools" }
+# Random number generation
+rand = "0.8"
+rand_chacha = "0.3"
+# Math operations
+nalgebra = "0.31"
+# Command line interface
+clap = { version = "4.3", features = ["derive"] }
+# JSON parsing
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
