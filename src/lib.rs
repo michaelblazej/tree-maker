@@ -7,10 +7,11 @@ pub mod config;
 #[derive(Debug, Clone)]
 pub struct BranchConfig {
     pub length: f32,
-    pub radius: f32,
-    pub segments: u32,
+    pub start_radius: f32,
+    pub end_radius: f32,
+    pub length_segments: u32,
+    pub radial_segments: u32,
     pub angle: f32,
-    pub taper: f32,
     pub twist: f32,
     pub gnarliness: f32,
     pub children: u32,

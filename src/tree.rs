@@ -231,35 +231,25 @@ fn generate_branch_hierarchy(
 )  {
     println!("Generating branch at level {}, with {} children", level, config.children);
     println!("  children_config is {}", if config.children_config.is_some() { "Some" } else { "None" });
-    // Generate branch mesh using branch_maker
-    let (vertices, indices, normals, uvs) = branch_maker(
-        config.radius, 
-        config.radius * config.taper, 
-        config.length, 
-        config.segments, // Height segments 
-        12,  // Radial segments
-        config.gnarliness
-    );
     
     // Generate a series of transforms for a more natural branch shape
     let branch_transforms = generate_branch_transforms(
-        config.segments as usize,    // Segment count
-        config.length / config.segments as f32, // Segment length
+        config.length_segments as usize,    // Number of segments
+        config.length / config.length_segments as f32,  // Segment length
         config.gnarliness * 0.2,     // Curvature strength
         config.twist * 0.01,         // Curvature variation
         Some(generator.rng.gen())    // Random seed
     );
-    println!("  Branch transforms: {:?}", branch_transforms);
     
     println!("  Generated {} transforms for branch", branch_transforms.len());
     
     // Generate the mesh data for this branch using the transforms
     let (vertices, indices, normals, uvs) = create_transform_based_mesh(
         &branch_transforms,
-        config.radius,                  // Start radius
-        config.radius * config.taper,   // End radius
-        12,                            // Radial segments
-        config.gnarliness               // Noise level
+        config.start_radius,        // Start radius
+        config.end_radius,          // End radius
+        config.radial_segments as usize, // Radial segments
+        config.gnarliness            // Noise level
     );
     
     // Convert UVs from [f32; 2] to Vector2<f32>
@@ -318,7 +308,7 @@ fn generate_branch_hierarchy(
     if config.children > 0 {
         println!("  Level {} has {} children to generate", level, config.children);
         if let Some(child_config) = &config.children_config {
-            println!("  Level {} found child config with radius {}", level, (**child_config).radius);
+            println!("  Level {} found child config with start_radius {}", level, (**child_config).start_radius);
             let child_branch_config = (**child_config).clone();
             
             // Create each child branch based on the number specified

@@ -53,13 +53,25 @@ pub struct TextureScale {
 pub struct JsonBranchConfig {
     /// Length of the branch
     pub length: f32,
-    /// Radius of the branch
-    pub radius: f32,
+    /// Radius at the start of the branch
+    #[serde(rename = "startRadius")]
+    pub start_radius: f32,
+    /// Radius at the end of the branch
+    #[serde(rename = "endRadius")]
+    pub end_radius: f32,
+    /// Number of segments along the branch length
+    #[serde(rename = "lengthSegments")]
+    pub length_segments: u32,
     /// Number of segments around the branch circumference
+    #[serde(rename = "radialSegments")]
+    pub radial_segments: u32,
+    /// Backward compatibility field, will be ignored if length_segments is present
+    #[serde(default)]
     pub segments: u32,
     /// Angle of the branch relative to parent
     pub angle: f32,
-    /// Tapering factor of the branch (how much it narrows toward the tip)
+    /// Backward compatibility: Tapering factor of the branch
+    #[serde(default)]
     pub taper: f32,
     /// Twist amount along the branch axis
     pub twist: f32,
@@ -100,7 +112,7 @@ pub fn convert_json_branch_to_branch_config(json_branch: &JsonBranchConfig) -> B
     let children_config = json_branch.children_config
         .as_ref()
         .map(|config| {
-            println!("  Found child config with radius={}", config.radius);
+            println!("  Found child config with start_radius={}", config.start_radius);
             Box::new(convert_json_branch_to_branch_config(config))
         });
         
@@ -108,10 +120,11 @@ pub fn convert_json_branch_to_branch_config(json_branch: &JsonBranchConfig) -> B
     
     BranchConfig {
         length: json_branch.length,
-        radius: json_branch.radius,
-        segments: json_branch.segments,
+        start_radius: json_branch.start_radius,
+        end_radius: json_branch.end_radius,
+        length_segments: json_branch.length_segments,
+        radial_segments: json_branch.radial_segments,
         angle: json_branch.angle,
-        taper: json_branch.taper,
         twist: json_branch.twist,
         gnarliness: json_branch.gnarliness,
         children: json_branch.children,
