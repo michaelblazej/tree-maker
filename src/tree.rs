@@ -1,5 +1,5 @@
 use mesh_tools::{GltfBuilder, Triangle};
-use nalgebra::{Point3, Vector3, Quaternion, UnitQuaternion, Unit, UnitVector3, Matrix3, Rotation3};
+use nalgebra::{Point3, Vector3, Vector2, Quaternion, UnitQuaternion, Unit, UnitVector3, Matrix3, Rotation3};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::error::Error;
@@ -241,15 +241,38 @@ fn generate_branch_hierarchy(
         config.gnarliness
     );
     
-    // Create cylinder mesh using the vertices and triangles directly
-    let mesh_id = generator.builder.create_cylinder(
-        config.radius * config.taper, // Top radius
-        config.radius,               // Bottom radius
-        config.length,               // Height
-        12,                          // Radial segments
-        config.segments as usize,    // Height segments
-        false,                       // Not open-ended
-        Some(trunk_material)         // Material
+    // Generate a series of transforms for a more natural branch shape
+    let branch_transforms = generate_branch_transforms(
+        config.segments as usize,    // Segment count
+        config.length / config.segments as f32, // Segment length
+        config.gnarliness * 0.2,     // Curvature strength
+        config.twist * 0.01,         // Curvature variation
+        Some(generator.rng.gen())    // Random seed
+    );
+    println!("  Branch transforms: {:?}", branch_transforms);
+    
+    println!("  Generated {} transforms for branch", branch_transforms.len());
+    
+    // Generate the mesh data for this branch using the transforms
+    let (vertices, indices, normals, uvs) = create_transform_based_mesh(
+        &branch_transforms,
+        config.radius,                  // Start radius
+        config.radius * config.taper,   // End radius
+        12,                            // Radial segments
+        config.gnarliness               // Noise level
+    );
+    
+    // Convert UVs from [f32; 2] to Vector2<f32>
+    let uvs_vector: Vec<Vector2<f32>> = uvs.iter().map(|uv| Vector2::new(uv[0], uv[1])).collect();
+    
+    // Create custom mesh for the branch
+    let mesh_id = generator.builder.create_custom_mesh(
+        Some(format!("Branch_L{}", level)),
+        &vertices,
+        &indices,
+        Some(normals),
+        Some(vec![uvs_vector]),     // UVs in the format expected by the API
+        Some(trunk_material)        // Material
     );
     
     // Create node for this branch
@@ -259,9 +282,9 @@ fn generate_branch_hierarchy(
     };
     
     // Generate random rotation angles between 30 and 90 degrees
-    let rot_x_deg = generator.random_f32(30.0, 90.0);
-    let rot_y_deg = generator.random_f32(30.0, 90.0);
-    let rot_z_deg = generator.random_f32(30.0, 90.0);
+    let rot_x_deg = generator.random_f32(-40.0, 40.0);
+    let rot_y_deg = generator.random_f32(-40.0, 40.0);
+    let rot_z_deg = generator.random_f32(-40.0,40.0);
     
     // Convert to radians
     let rot_x = rot_x_deg * std::f32::consts::PI / 180.0;
@@ -276,7 +299,7 @@ fn generate_branch_hierarchy(
     let gltf_rotation = [quat.i, quat.j, quat.k, quat.w];
 
     // Add current branch node to scene
-    let center_position = position + Vector3::new(0.0,config.length/2.0,0.0);
+    let center_position = position + Vector3::new(0.0,0.0,0.0);
     
     let branch_node = generator.builder.add_node(
         Some(node_name),
@@ -316,8 +339,8 @@ fn generate_branch_hierarchy(
                 // Calculate child branch start position (rotate around parent)
                 let child_pos = Point3::new(
                     0.0,
-                    generator.random_f32(0.0, parent_end.y),
-                    0.0
+                    0.0,
+                    generator.random_f32(0.0, parent_end.y)
                 );
                 println!("  Child position: ({}, {}, {})", child_pos.x, child_pos.y, child_pos.z);
                 
@@ -344,6 +367,163 @@ fn generate_branch_hierarchy(
 pub struct BranchTransform {
     pub position: Point3<f32>,
     pub rotation: UnitQuaternion<f32>,
+}
+
+/// Create a mesh (vertices, indices, normals, uvs) from a series of transforms
+/// 
+/// # Arguments
+/// 
+/// * `transforms` - List of transforms defining the path of the branch
+/// * `start_radius` - Radius at the base of the branch
+/// * `end_radius` - Radius at the tip of the branch
+/// * `radial_segments` - Number of segments around the branch circumference
+/// * `noise_level` - Amount of random variation (0.0-1.0) to apply to the vertices
+/// 
+/// # Returns
+/// 
+/// Tuple containing (vertices, indices, normals, uvs) for the mesh
+pub fn create_transform_based_mesh(
+    transforms: &[BranchTransform],
+    start_radius: f32,
+    end_radius: f32,
+    radial_segments: usize,
+    noise_level: f32
+) -> (Vec<Point3<f32>>, Vec<Triangle>, Vec<Vector3<f32>>, Vec<[f32; 2]>) {
+    let radial_segments = radial_segments.max(3); // Minimum 3 segments
+    let noise_level = noise_level.max(0.0).min(1.0); // Clamp noise level between 0 and 1
+    
+    let segment_count = transforms.len();
+    if segment_count < 2 {
+        // Not enough transforms to create a valid mesh
+        return (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    }
+    
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let mut normals = Vec::new();
+    let mut uvs = Vec::new();
+    
+    // Create a random number generator for noise
+    let mut rng = rand::thread_rng();
+    
+    // For each transform, create a ring of vertices
+    for (i, transform) in transforms.iter().enumerate() {
+        let t = i as f32 / (segment_count - 1) as f32; // Parametric value (0 to 1)
+        let radius = start_radius * (1.0 - t) + end_radius * t; // Interpolate radius
+        
+        // Get the position and rotation
+        let center = transform.position;
+        let rotation = transform.rotation;
+        
+        // Create vertices for this ring
+        for j in 0..radial_segments {
+            let angle = 2.0 * PI * (j as f32 / radial_segments as f32);
+            
+            // Create a base offset vector around the unit circle
+            let base_offset = Vector3::new(angle.cos(), angle.sin(), 0.0);
+            
+            // Apply noise to the radius
+            let noisy_radius = if noise_level > 0.0 {
+                radius * (1.0 + rng.gen_range(-noise_level..=noise_level) * 0.3)
+            } else {
+                radius
+            };
+            
+            // Scale and rotate the offset vector
+            let offset = rotation * base_offset.scale(noisy_radius);
+            
+            // Final vertex position
+            let vertex = center + offset;
+            
+            // Calculate normal (pointing outward from center)
+            let normal = offset.normalize();
+            
+            // Calculate UV coordinates
+            let u = j as f32 / radial_segments as f32;
+            let v = t;
+            
+            vertices.push(vertex);
+            normals.push(normal);
+            uvs.push([u, v]);
+        }
+    }
+    
+    // Create triangles between rings
+    for i in 0..(segment_count - 1) {
+        let ring_start = i * radial_segments;
+        let next_ring_start = (i + 1) * radial_segments;
+        
+        for j in 0..radial_segments {
+            let current = ring_start + j;
+            let next = ring_start + ((j + 1) % radial_segments);
+            let current_up = next_ring_start + j;
+            let next_up = next_ring_start + ((j + 1) % radial_segments);
+            
+            // First triangle
+            indices.push(Triangle::new(current as u32, next as u32, current_up as u32));
+            
+            // Second triangle
+            indices.push(Triangle::new(next as u32, next_up as u32, current_up as u32));
+        }
+    }
+    
+    // Add cap for the bottom
+    let bottom_center_idx = vertices.len() as u32;
+    vertices.push(transforms[0].position);
+    normals.push(Vector3::new(0.0, 0.0, -1.0));
+    uvs.push([0.5, 0.0]);
+    
+    for j in 0..radial_segments {
+        let current = j;
+        let next = (j + 1) % radial_segments;
+        
+        indices.push(Triangle::new(bottom_center_idx, current as u32, next as u32));
+    }
+    
+    // Handle top of the branch based on end radius
+    if end_radius == 0.0 {
+        // For zero end radius, create a pointed tip by connecting all vertices to the tip
+        // Use the last transform's position as the tip point
+        let tip_idx = vertices.len() as u32;
+        vertices.push(transforms[segment_count - 1].position);
+        
+        // Create a normal pointing outward along the last segment's direction
+        let last_direction = if segment_count >= 2 {
+            let last_pos = transforms[segment_count - 1].position;
+            let prev_pos = transforms[segment_count - 2].position;
+            (last_pos - prev_pos).normalize()
+        } else {
+            Vector3::new(0.0, 0.0, 1.0)
+        };
+        
+        normals.push(last_direction);
+        uvs.push([0.5, 1.0]);
+        
+        // Connect the last ring to the tip point
+        let top_start = (segment_count - 1) * radial_segments;
+        for j in 0..radial_segments {
+            let current = top_start + j;
+            let next = top_start + ((j + 1) % radial_segments);
+            
+            indices.push(Triangle::new(tip_idx, next as u32, current as u32));
+        }
+    } else {
+        // Normal cap for non-zero end radius
+        let top_center_idx = vertices.len() as u32;
+        vertices.push(transforms[segment_count - 1].position);
+        normals.push(Vector3::new(0.0, 0.0, 1.0));
+        uvs.push([0.5, 1.0]);
+        
+        let top_start = (segment_count - 1) * radial_segments;
+        for j in 0..radial_segments {
+            let current = top_start + j;
+            let next = top_start + ((j + 1) % radial_segments);
+            
+            indices.push(Triangle::new(top_center_idx, next as u32, current as u32));
+        }
+    }
+    
+    (vertices, indices, normals, uvs)
 }
 
 /// Generate a list of transforms along a curving branch
@@ -377,7 +557,7 @@ pub fn generate_branch_transforms(
     // Initial position and direction
     let mut position = Point3::new(0.0, 0.0, 0.0);
     let mut direction = Vector3::new(0.0, 0.0, 1.0);
-    let up = Vector3::new(0.0, 1.0, 0.0);
+    let up = Vector3::new(0.0, 0.0, 1.0);
     
     for _ in 0..segment_count {
         // Compute small random curvature (pitch, yaw, roll)
