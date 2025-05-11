@@ -69,6 +69,7 @@ pub struct JsonBranchConfig {
     pub children: u32,
     /// Configuration for child branches
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "children_config")]
     pub children_config: Option<Box<JsonBranchConfig>>,
 }
 
@@ -93,10 +94,17 @@ pub fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<JsonTreeConfig, 
 
 /// Convert a JsonBranchConfig to the application's BranchConfig
 pub fn convert_json_branch_to_branch_config(json_branch: &JsonBranchConfig) -> BranchConfig {
+    println!("Converting JsonBranchConfig: children={}, has_children_config={}", 
+              json_branch.children, json_branch.children_config.is_some());
     // Recursively convert the children configuration if it exists
     let children_config = json_branch.children_config
         .as_ref()
-        .map(|config| Box::new(convert_json_branch_to_branch_config(config)));
+        .map(|config| {
+            println!("  Found child config with radius={}", config.radius);
+            Box::new(convert_json_branch_to_branch_config(config))
+        });
+        
+    println!("  Resulting children_config is {}", if children_config.is_some() { "Some" } else { "None" });
     
     BranchConfig {
         length: json_branch.length,

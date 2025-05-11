@@ -1,5 +1,5 @@
 use mesh_tools::{GltfBuilder, Triangle};
-use nalgebra::{Point3, Vector3};
+use nalgebra::{Point3, Vector3, Quaternion, UnitQuaternion, Unit, UnitVector3, Matrix3, Rotation3};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::error::Error;
@@ -229,6 +229,8 @@ fn generate_branch_hierarchy(
     leaves_material: usize,
     level: u32,
 )  {
+    println!("Generating branch at level {}, with {} children", level, config.children);
+    println!("  children_config is {}", if config.children_config.is_some() { "Some" } else { "None" });
     // Generate branch mesh using branch_maker
     let (vertices, indices, normals, uvs) = branch_maker(
         config.radius, 
@@ -272,7 +274,9 @@ fn generate_branch_hierarchy(
     
     // Generate child branches if any
     if config.children > 0 {
+        println!("  Level {} has {} children to generate", level, config.children);
         if let Some(child_config) = &config.children_config {
+            println!("  Level {} found child config with radius {}", level, (**child_config).radius);
             let child_branch_config = (**child_config).clone();
             
             // Create each child branch based on the number specified
@@ -298,6 +302,7 @@ fn generate_branch_hierarchy(
                 );
                 
                 // Recursively create this child branch and its descendants
+                println!("  Creating child {} of {} for level {}", i+1, config.children, level);
                 generate_branch_hierarchy(
                     generator,
                     &child_branch_config,
@@ -312,4 +317,102 @@ fn generate_branch_hierarchy(
         }
     }
     
+}
+
+/// A transform representing position and rotation in 3D space
+#[derive(Debug, Clone)]
+pub struct BranchTransform {
+    pub position: Point3<f32>,
+    pub rotation: UnitQuaternion<f32>,
+}
+
+/// Generate a list of transforms along a curving branch
+/// 
+/// # Arguments
+/// 
+/// * `segment_count` - Number of segments in the branch
+/// * `segment_length` - Length of each segment
+/// * `curvature_strength` - How much the branch can curve (higher values = more curvy)
+/// * `curvature_variation` - How much rotation around the branch axis can occur
+/// * `seed` - Optional random seed for reproducibility
+/// 
+/// # Returns
+/// 
+/// A vector of BranchTransform containing position and rotation for each segment
+pub fn generate_branch_transforms(
+    segment_count: usize,
+    segment_length: f32,
+    curvature_strength: f32,
+    curvature_variation: f32,
+    seed: Option<u64>
+) -> Vec<BranchTransform> {
+    // Create an RNG with the given seed or use a random one
+    let mut rng = match seed {
+        Some(s) => ChaCha8Rng::seed_from_u64(s),
+        None => ChaCha8Rng::from_entropy(),
+    };
+    
+    let mut transforms = Vec::with_capacity(segment_count);
+    
+    // Initial position and direction
+    let mut position = Point3::new(0.0, 0.0, 0.0);
+    let mut direction = Vector3::new(0.0, 0.0, 1.0);
+    let up = Vector3::new(0.0, 1.0, 0.0);
+    
+    for _ in 0..segment_count {
+        // Compute small random curvature (pitch, yaw, roll)
+        let pitch = rng.gen_range(-curvature_strength..=curvature_strength);
+        let yaw = rng.gen_range(-curvature_strength..=curvature_strength);
+        let roll = rng.gen_range(-curvature_variation..=curvature_variation);
+        
+        // Apply curvature to the direction using Euler angles
+        // First, roll around Z
+        let roll_rot = Rotation3::from_euler_angles(0.0, 0.0, roll);
+        // Then pitch around X
+        let pitch_rot = Rotation3::from_euler_angles(pitch, 0.0, 0.0);
+        // Finally, yaw around Y
+        let yaw_rot = Rotation3::from_euler_angles(0.0, yaw, 0.0);
+        
+        // Combine rotations and apply to direction
+        let combined_rot = yaw_rot * pitch_rot * roll_rot;
+        direction = combined_rot * direction;
+        
+        // Normalize the direction vector
+        let direction_norm = direction.magnitude();
+        if direction_norm > 1e-6 {
+            direction /= direction_norm;
+        }
+        
+        // Create rotation that aligns Z+ with current direction
+        // First, calculate X axis by crossing up with Z
+        let mut x_axis = up.cross(&direction);
+        
+        // If x_axis is too small (happens when direction is parallel to up),
+        // use a default X axis
+        if x_axis.magnitude() < 1e-6 {
+            x_axis = Vector3::new(1.0, 0.0, 0.0);
+        } else {
+            x_axis = x_axis.normalize();
+        }
+        
+        // Calculate Y axis by crossing Z with X
+        let y_axis = direction.cross(&x_axis).normalize();
+        
+        // Create rotation matrix from orthogonal axes
+        let rot_matrix = Matrix3::from_columns(&[x_axis, y_axis, direction]);
+        
+        // Convert to quaternion
+        let rot_quat = UnitQuaternion::from_matrix(&rot_matrix);
+        
+        // Add transform to the list
+        transforms.push(BranchTransform {
+            position,
+            rotation: rot_quat,
+        });
+        
+        // Move to next position
+        position += direction.scale(segment_length);
+    }
+    
+    transforms
 }
