@@ -258,12 +258,31 @@ fn generate_branch_hierarchy(
         _ => format!("Branch_L{}_{}", level, rand::random::<u32>() % 100000),
     };
     
+    // Generate random rotation angles between 30 and 90 degrees
+    let rot_x_deg = generator.random_f32(30.0, 90.0);
+    let rot_y_deg = generator.random_f32(30.0, 90.0);
+    let rot_z_deg = generator.random_f32(30.0, 90.0);
+    
+    // Convert to radians
+    let rot_x = rot_x_deg * std::f32::consts::PI / 180.0;
+    let rot_y = rot_y_deg * std::f32::consts::PI / 180.0;
+    let rot_z = rot_z_deg * std::f32::consts::PI / 180.0;
+    
+    // Create rotation quaternion
+    let rotation = UnitQuaternion::from_euler_angles(rot_x, rot_y, rot_z);
+    
+    // Extract quaternion components in the order expected by GLTF (x, y, z, w)
+    let quat = rotation.into_inner();
+    let gltf_rotation = [quat.i, quat.j, quat.k, quat.w];
+
     // Add current branch node to scene
+    let center_position = position + Vector3::new(0.0,config.length/2.0,0.0);
+    
     let branch_node = generator.builder.add_node(
         Some(node_name),
         Some(mesh_id),
-        Some(position.into()),
-        None, // No rotation yet
+        Some(center_position.into()),
+        Some(gltf_rotation),
         None  // No scaling
     );
     
@@ -287,7 +306,7 @@ fn generate_branch_hierarchy(
                 // Calculate position relative to parent branch end
                 let parent_end = Point3::new(
                     position.x,
-                    position.y + config.length,
+                    position.y + config.length/2.0,
                     position.z
                 );
                 
@@ -296,10 +315,11 @@ fn generate_branch_hierarchy(
                 
                 // Calculate child branch start position (rotate around parent)
                 let child_pos = Point3::new(
-                    parent_end.x + angle_radians.cos() * branch_angle_rad.sin() * child_branch_config.radius,
-                    parent_end.y,
-                    parent_end.z + angle_radians.sin() * branch_angle_rad.sin() * child_branch_config.radius
+                    0.0,
+                    generator.random_f32(0.0, parent_end.y),
+                    0.0
                 );
+                println!("  Child position: ({}, {}, {})", child_pos.x, child_pos.y, child_pos.z);
                 
                 // Recursively create this child branch and its descendants
                 println!("  Creating child {} of {} for level {}", i+1, config.children, level);
