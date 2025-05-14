@@ -14,12 +14,14 @@
   "trunk": {
     "length": 5.0,
     "startRadius": 0.1,
-    "endRadius": 0.0,
+    "endRadius": 0.1,
     "lengthSegments": 18,
     "radialSegments": 12,
     "angle": 0.0,
-    "twist": 0.0,
-    "gnarliness": 0.0,
+    "twist": 0.00,
+    "gnarliness": 0.1,
+    "minRotation": 15.0,
+    "maxRotation": 0.0,
     "children": 4,
     "children_config": {
       "length": 3.5,
@@ -30,6 +32,8 @@
       "angle": 0.0,
       "twist": 0.0,
       "gnarliness": 0.0,
+      "minRotation": 20.0,
+      "maxRotation": 40.0,
       "children": 3,
       "children_config": {
         "length": 2.0,
@@ -40,6 +44,8 @@
         "angle": 0.0,
         "twist": 0.0,
         "gnarliness": 0.0,
+        "minRotation": 25.0,
+        "maxRotation": 45.0,
         "children": 2,
         "children_config": {
           "length": 1.0,
@@ -50,6 +56,8 @@
           "angle": 0.0,
           "twist": 0.0,
           "gnarliness": 0.0,
+          "minRotation": 30.0,
+          "maxRotation": 50.0,
           "children": 0
         }
       }

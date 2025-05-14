@@ -28,6 +28,10 @@ impl TreeGenerator {
     }
 
     fn random_f32(&mut self, min: f32, max: f32) -> f32 {
+        // Handle the case where min == max to avoid the 'cannot sample empty range' error
+        if (max - min).abs() < f32::EPSILON {
+            return min;
+        }
         self.rng.gen_range(min..=max)
     }
 
@@ -94,11 +98,11 @@ pub fn branch_maker(start_radius: f32, end_radius: f32, height: f32, height_segm
             let angle = 2.0 * PI * (segment as f32 / radial_segments as f32);
             
             // Add noise to x and z coordinates
-            let noise_x = if noise_level > 0.0 { rng.gen_range(-1.0..=1.0) * noise_level * section_radius * 0.3 } else { 0.0 };
-            let noise_y = if noise_level > 0.0 { rng.gen_range(-1.0..=1.0) * noise_level * section_radius * 0.3 } else { 0.0 };
+            let noise_x = if noise_level > 0.001 { rng.gen_range(-1.0..1.0) * noise_level * section_radius * 0.3 } else { 0.0 };
+            let noise_y = if noise_level > 0.001 { rng.gen_range(-1.0..1.0) * noise_level * section_radius * 0.3 } else { 0.0 };
             
-            // Also add some minor noise to y to make it less uniform
-            let noise_z = if noise_level > 0.0 { rng.gen_range(-1.0..=1.0) * noise_level * height * 0.05 } else { 0.0 };
+            // Less noise in Z direction to avoid significant length changes
+            let noise_z = if noise_level > 0.001 { rng.gen_range(-1.0..1.0) * noise_level * height * 0.05 } else { 0.0 };
             
             let x = angle.cos() * section_radius + noise_x;
             let y = angle.sin() * section_radius + noise_y;
@@ -237,7 +241,7 @@ fn generate_branch_hierarchy(
         config.length_segments as usize,    // Number of segments
         config.length / config.length_segments as f32,  // Segment length
         config.gnarliness * 0.2,     // Curvature strength
-        config.twist * 0.01,         // Curvature variation
+        18.1,//config.twist * 0.01,         // Curvature variation
         Some(generator.rng.gen())    // Random seed
     );
     
@@ -271,10 +275,19 @@ fn generate_branch_hierarchy(
         _ => format!("Branch_L{}_{}", level, rand::random::<u32>() % 100000),
     };
     
-    // Generate random rotation angles between 30 and 90 degrees
-    let rot_x_deg = generator.random_f32(-40.0, 40.0);
-    let rot_y_deg = generator.random_f32(-40.0, 40.0);
-    let rot_z_deg = generator.random_f32(-40.0,40.0);
+    // Generate random rotation angles between min_rotation and max_rotation from config with random sign
+    // Ensure min_rot and max_rot are at least 0.1 apart to avoid empty range errors
+    let min_rot = config.min_rotation;
+    let max_rot = if (config.max_rotation - config.min_rotation) < 0.1 {
+        config.min_rotation + 0.1
+    } else {
+        config.max_rotation
+    };
+    
+    // Generate random rotation with guaranteed non-empty ranges
+    let rot_x_deg = generator.rng.gen_range(min_rot..=max_rot) * if generator.rng.gen::<bool>() { 1.0 } else { -1.0 };
+    let rot_y_deg = generator.rng.gen_range(min_rot..=max_rot) * if generator.rng.gen::<bool>() { 1.0 } else { -1.0 };
+    let rot_z_deg = generator.rng.gen_range(min_rot..=max_rot) * if generator.rng.gen::<bool>() { 1.0 } else { -1.0 };
     
     // Convert to radians
     let rot_x = rot_x_deg * std::f32::consts::PI / 180.0;
@@ -326,11 +339,22 @@ fn generate_branch_hierarchy(
                 // Apply the branch angle to create an offset direction
                 let branch_angle_rad = config.angle * std::f32::consts::PI / 180.0;
                 
-                // Calculate child branch start position (rotate around parent)
+                // Select a random position along the parent branch for the child
+                // Skip the first transform (base) and avoid the very tip for stability
+                let valid_transforms = if branch_transforms.len() > 2 {
+                    &branch_transforms[1..branch_transforms.len()-1]
+                } else {
+                    &branch_transforms[..]
+                };
+                
+                let random_index = generator.rng.gen_range(0..valid_transforms.len());
+                let random_transform = &valid_transforms[random_index];
+                
+                // Extract the position from the randomly selected transform
                 let child_pos = Point3::new(
-                    0.0,
-                    0.0,
-                    generator.random_f32(0.0, parent_end.y)
+                    random_transform.position[0],
+                    random_transform.position[1],
+                    random_transform.position[2]
                 );
                 println!("  Child position: ({}, {}, {})", child_pos.x, child_pos.y, child_pos.z);
                 
@@ -355,9 +379,10 @@ fn generate_branch_hierarchy(
 /// A transform representing position and rotation in 3D space
 #[derive(Debug, Clone)]
 pub struct BranchTransform {
-    pub position: Point3<f32>,
-    pub rotation: UnitQuaternion<f32>,
+    pub position: [f32; 3],
+    pub rotation: [f32; 4],
 }
+
 
 /// Create a mesh (vertices, indices, normals, uvs) from a series of transforms
 /// 
@@ -388,6 +413,14 @@ pub fn create_transform_based_mesh(
         return (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     }
     
+    // Convert transform arrays back to nalgebra types for easier math operations
+    let transforms: Vec<(Point3<f32>, UnitQuaternion<f32>)> = transforms.iter().map(|t| {
+        let pos = Point3::new(t.position[0], t.position[1], t.position[2]);
+        let quat = Quaternion::new(t.rotation[3], t.rotation[0], t.rotation[1], t.rotation[2]);
+        let rot = UnitQuaternion::from_quaternion(quat);
+        (pos, rot)
+    }).collect();
+    
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
     let mut normals = Vec::new();
@@ -402,8 +435,8 @@ pub fn create_transform_based_mesh(
         let radius = start_radius * (1.0 - t) + end_radius * t; // Interpolate radius
         
         // Get the position and rotation
-        let center = transform.position;
-        let rotation = transform.rotation;
+        let current_position = transforms[i].0;
+        let current_quat = transforms[i].1;
         
         // Create vertices for this ring
         for j in 0..radial_segments {
@@ -413,17 +446,18 @@ pub fn create_transform_based_mesh(
             let base_offset = Vector3::new(angle.cos(), angle.sin(), 0.0);
             
             // Apply noise to the radius
-            let noisy_radius = if noise_level > 0.0 {
-                radius * (1.0 + rng.gen_range(-noise_level..=noise_level) * 0.3)
+            let noisy_radius = if noise_level > 0.001 {
+                // Ensure we have a valid range to sample from
+                radius * (1.0 + rng.gen_range(-noise_level..noise_level) * 0.3)
             } else {
                 radius
             };
             
             // Scale and rotate the offset vector
-            let offset = rotation * base_offset.scale(noisy_radius);
+            let offset = current_quat * base_offset.scale(noisy_radius);
             
             // Final vertex position
-            let vertex = center + offset;
+            let vertex = current_position + offset;
             
             // Calculate normal (pointing outward from center)
             let normal = offset.normalize();
@@ -459,7 +493,7 @@ pub fn create_transform_based_mesh(
     
     // Add cap for the bottom
     let bottom_center_idx = vertices.len() as u32;
-    vertices.push(transforms[0].position);
+    vertices.push(transforms[0].0);
     normals.push(Vector3::new(0.0, 0.0, -1.0));
     uvs.push([0.5, 0.0]);
     
@@ -471,22 +505,20 @@ pub fn create_transform_based_mesh(
     }
     
     // Handle top of the branch based on end radius
-    if end_radius == 0.0 {
-        // For zero end radius, create a pointed tip by connecting all vertices to the tip
-        // Use the last transform's position as the tip point
+    if end_radius < 0.0001 {
+        // Create a single vertex at the tip
         let tip_idx = vertices.len() as u32;
-        vertices.push(transforms[segment_count - 1].position);
+        vertices.push(transforms[segment_count - 1].0);
         
-        // Create a normal pointing outward along the last segment's direction
-        let last_direction = if segment_count >= 2 {
-            let last_pos = transforms[segment_count - 1].position;
-            let prev_pos = transforms[segment_count - 2].position;
-            (last_pos - prev_pos).normalize()
+        // Calculate the direction from the second-to-last point to the last point
+        let direction = if segment_count > 2 {
+            (transforms[segment_count - 1].0 - transforms[segment_count - 2].0).normalize()
         } else {
             Vector3::new(0.0, 0.0, 1.0)
         };
         
-        normals.push(last_direction);
+        // Use this direction as the normal for the tip
+        normals.push(direction);
         uvs.push([0.5, 1.0]);
         
         // Connect the last ring to the tip point
@@ -500,7 +532,7 @@ pub fn create_transform_based_mesh(
     } else {
         // Normal cap for non-zero end radius
         let top_center_idx = vertices.len() as u32;
-        vertices.push(transforms[segment_count - 1].position);
+        vertices.push(transforms[segment_count - 1].0);
         normals.push(Vector3::new(0.0, 0.0, 1.0));
         uvs.push([0.5, 1.0]);
         
@@ -513,17 +545,18 @@ pub fn create_transform_based_mesh(
         }
     }
     
+    // Return the generated mesh data
     (vertices, indices, normals, uvs)
 }
 
-/// Generate a list of transforms along a curving branch
+/// Generate a list of transforms along a branch with natural growth
 /// 
 /// # Arguments
 /// 
 /// * `segment_count` - Number of segments in the branch
 /// * `segment_length` - Length of each segment
-/// * `curvature_strength` - How much the branch can curve (higher values = more curvy)
-/// * `curvature_variation` - How much rotation around the branch axis can occur
+/// * `curvature_strength` - Strength of the branch curvature
+/// * `curvature_variation` - Variation in curvature
 /// * `seed` - Optional random seed for reproducibility
 /// 
 /// # Returns
@@ -536,73 +569,62 @@ pub fn generate_branch_transforms(
     curvature_variation: f32,
     seed: Option<u64>
 ) -> Vec<BranchTransform> {
-    // Create an RNG with the given seed or use a random one
-    let mut rng = match seed {
-        Some(s) => ChaCha8Rng::seed_from_u64(s),
-        None => ChaCha8Rng::from_entropy(),
+    // Initialize the random number generator with seed if provided
+    let mut rng = if let Some(s) = seed {
+        ChaCha8Rng::seed_from_u64(s)
+    } else {
+        ChaCha8Rng::from_entropy()
     };
     
     let mut transforms = Vec::with_capacity(segment_count);
     
-    // Initial position and direction
-    let mut position = Point3::new(0.0, 0.0, 0.0);
-    let mut direction = Vector3::new(0.0, 0.0, 1.0);
-    let up = Vector3::new(0.0, 0.0, 1.0);
+    // Set up the initial position and direction
+    let mut position = Vector3::new(0.0, 0.0, 0.0);
+    let initial_direction = Vector3::new(0.0, 0.0, 1.0);
+    let mut cumulative_rotation = UnitQuaternion::identity();
     
-    for _ in 0..segment_count {
-        // Compute small random curvature (pitch, yaw, roll)
-        let pitch = rng.gen_range(-curvature_strength..=curvature_strength);
-        let yaw = rng.gen_range(-curvature_strength..=curvature_strength);
-        let roll = rng.gen_range(-curvature_variation..=curvature_variation);
+    // Add the initial transform
+    transforms.push(BranchTransform {
+        position: [position.x, position.y, position.z],
+        rotation: [0.0, 0.0, 0.0, 1.0], // Identity quaternion (w=1)
+    });
+    
+    // Generate the transforms for the remaining segments
+    for _ in 1..segment_count {
+        // Create a small random rotation to apply to the growth direction
+        // Use a small value for curvature (0.01) if provided value is too small or zero
+        let actual_curvature = if curvature_strength < 0.001 { 0.01 } else { curvature_strength };
         
-        // Apply curvature to the direction using Euler angles
-        // First, roll around Z
-        let roll_rot = Rotation3::from_euler_angles(0.0, 0.0, roll);
-        // Then pitch around X
-        let pitch_rot = Rotation3::from_euler_angles(pitch, 0.0, 0.0);
-        // Finally, yaw around Y
-        let yaw_rot = Rotation3::from_euler_angles(0.0, yaw, 0.0);
+        // Use a minimum value for variation to avoid empty ranges
+        let actual_variation = if curvature_variation < 0.001 { 0.1 } else { curvature_variation };
         
-        // Combine rotations and apply to direction
-        let combined_rot = yaw_rot * pitch_rot * roll_rot;
-        direction = combined_rot * direction;
+        // Generate rotation angles for each axis (pitch, yaw, roll)
+        // Use hardcoded ranges to avoid empty range errors
+        let pitch = actual_curvature * (rng.gen::<f32>() * 2.0 - 1.0) * actual_variation;
+        let yaw = actual_curvature * (rng.gen::<f32>() * 2.0 - 1.0) * actual_variation;
+        let roll = actual_curvature * (rng.gen::<f32>() * 2.0 - 1.0) * actual_variation * 0.5;
         
-        // Normalize the direction vector
-        let direction_norm = direction.magnitude();
-        if direction_norm > 1e-6 {
-            direction /= direction_norm;
-        }
+        // Create rotation quaternion from the random angles
+        let segment_rotation = UnitQuaternion::from_euler_angles(pitch, yaw, roll);
         
-        // Create rotation that aligns Z+ with current direction
-        // First, calculate X axis by crossing up with Z
-        let mut x_axis = up.cross(&direction);
+        // Apply the rotation to our cumulative rotation
+        cumulative_rotation = cumulative_rotation * segment_rotation;
         
-        // If x_axis is too small (happens when direction is parallel to up),
-        // use a default X axis
-        if x_axis.magnitude() < 1e-6 {
-            x_axis = Vector3::new(1.0, 0.0, 0.0);
-        } else {
-            x_axis = x_axis.normalize();
-        }
+        // Calculate new position by moving in the direction determined by the cumulative rotation
+        let direction = cumulative_rotation * initial_direction;
+        position += direction * segment_length;
         
-        // Calculate Y axis by crossing Z with X
-        let y_axis = direction.cross(&x_axis).normalize();
+        // Extract the quaternion components
+        let quat = cumulative_rotation.into_inner();
         
-        // Create rotation matrix from orthogonal axes
-        let rot_matrix = Matrix3::from_columns(&[x_axis, y_axis, direction]);
-        
-        // Convert to quaternion
-        let rot_quat = UnitQuaternion::from_matrix(&rot_matrix);
-        
-        // Add transform to the list
+        // Add the transform for this segment
         transforms.push(BranchTransform {
-            position,
-            rotation: rot_quat,
+            position: [position.x, position.y, position.z],
+            rotation: [quat.i, quat.j, quat.k, quat.w],
         });
-        
-        // Move to next position
-        position += direction.scale(segment_length);
     }
     
     transforms
 }
+
+// L-system approach no longer used - replaced with continuous growth vector

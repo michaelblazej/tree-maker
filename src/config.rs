@@ -77,6 +77,12 @@ pub struct JsonBranchConfig {
     pub twist: f32,
     /// Gnarliness factor (randomness in branch shape)
     pub gnarliness: f32,
+    /// Minimum rotation angle (degrees) for branch variations
+    #[serde(rename = "minRotation", default = "default_min_rotation")]
+    pub min_rotation: f32,
+    /// Maximum rotation angle (degrees) for branch variations
+    #[serde(rename = "maxRotation", default = "default_max_rotation")]
+    pub max_rotation: f32,
     /// Number of child branches
     pub children: u32,
     /// Configuration for child branches
@@ -107,7 +113,7 @@ pub fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<JsonTreeConfig, 
 /// Convert a JsonBranchConfig to the application's BranchConfig
 pub fn convert_json_branch_to_branch_config(json_branch: &JsonBranchConfig) -> BranchConfig {
     println!("Converting JsonBranchConfig: children={}, has_children_config={}", 
-              json_branch.children, json_branch.children_config.is_some());
+               json_branch.children, json_branch.children_config.is_some());
     // Recursively convert the children configuration if it exists
     let children_config = json_branch.children_config
         .as_ref()
@@ -118,15 +124,24 @@ pub fn convert_json_branch_to_branch_config(json_branch: &JsonBranchConfig) -> B
         
     println!("  Resulting children_config is {}", if children_config.is_some() { "Some" } else { "None" });
     
+    // Determine segment count from length_segments or segments (backward compatibility)
+    let segments = if json_branch.length_segments > 0 {
+        json_branch.length_segments
+    } else {
+        json_branch.segments
+    };
+
     BranchConfig {
         length: json_branch.length,
         start_radius: json_branch.start_radius,
         end_radius: json_branch.end_radius,
-        length_segments: json_branch.length_segments,
+        length_segments: segments,
         radial_segments: json_branch.radial_segments,
         angle: json_branch.angle,
         twist: json_branch.twist,
         gnarliness: json_branch.gnarliness,
+        min_rotation: json_branch.min_rotation,
+        max_rotation: json_branch.max_rotation,
         children: json_branch.children,
         children_config,
     }
@@ -135,4 +150,14 @@ pub fn convert_json_branch_to_branch_config(json_branch: &JsonBranchConfig) -> B
 /// Get the trunk configuration from the JSON config
 pub fn get_branch_config(json_config: &JsonTreeConfig) -> BranchConfig {
     convert_json_branch_to_branch_config(&json_config.trunk)
+}
+
+/// Default value for minimum rotation (20 degrees)
+fn default_min_rotation() -> f32 {
+    20.0
+}
+
+/// Default value for maximum rotation (40 degrees)
+fn default_max_rotation() -> f32 {
+    40.0
 }

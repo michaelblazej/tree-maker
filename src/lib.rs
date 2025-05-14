@@ -14,6 +14,8 @@ pub struct BranchConfig {
     pub angle: f32,
     pub twist: f32,
     pub gnarliness: f32,
+    pub min_rotation: f32,
+    pub max_rotation: f32,
     pub children: u32,
     pub children_config: Option<Box<BranchConfig>>,
 }
