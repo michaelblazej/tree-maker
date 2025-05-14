@@ -83,6 +83,12 @@ pub struct JsonBranchConfig {
     /// Maximum rotation angle (degrees) for branch variations
     #[serde(rename = "maxRotation", default = "default_max_rotation")]
     pub max_rotation: f32,
+    /// Minimum percentage position along parent branch where child branches can appear (0-100)
+    #[serde(rename = "minBranchPosPct", default = "default_min_branch_pos_pct")]
+    pub min_branch_pos_pct: f32,
+    /// Maximum percentage position along parent branch where child branches can appear (0-100)
+    #[serde(rename = "maxBranchPosPct", default = "default_max_branch_pos_pct")]
+    pub max_branch_pos_pct: f32,
     /// Number of child branches
     pub children: u32,
     /// Configuration for child branches
@@ -142,6 +148,8 @@ pub fn convert_json_branch_to_branch_config(json_branch: &JsonBranchConfig) -> B
         gnarliness: json_branch.gnarliness,
         min_rotation: json_branch.min_rotation,
         max_rotation: json_branch.max_rotation,
+        min_branch_pos_pct: json_branch.min_branch_pos_pct,
+        max_branch_pos_pct: json_branch.max_branch_pos_pct,
         children: json_branch.children,
         children_config,
     }
@@ -160,4 +168,12 @@ fn default_min_rotation() -> f32 {
 /// Default value for maximum rotation (40 degrees)
 fn default_max_rotation() -> f32 {
     40.0
+}
+
+fn default_min_branch_pos_pct() -> f32 {
+    10.0 // Default to 10% from start of branch
+}
+
+fn default_max_branch_pos_pct() -> f32 {
+    90.0 // Default to 90% from start of branch
 }

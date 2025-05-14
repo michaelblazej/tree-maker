@@ -16,6 +16,8 @@ pub struct BranchConfig {
     pub gnarliness: f32,
     pub min_rotation: f32,
     pub max_rotation: f32,
+    pub min_branch_pos_pct: f32,
+    pub max_branch_pos_pct: f32,
     pub children: u32,
     pub children_config: Option<Box<BranchConfig>>,
 }

@@ -327,13 +327,30 @@ fn generate_branch_hierarchy(
             // Create each child branch based on the number specified
             for i in 0..config.children {
                 
-                // Select a random position along the parent branch for the child
-                // Skip the first transform (base) and avoid the very tip for stability
-                let valid_transforms = if branch_transforms.len() > 2 {
-                    &branch_transforms[1..branch_transforms.len()-1]
-                } else {
-                    &branch_transforms[..]
-                };
+                // Select a random position along the parent branch for the child based on percentage range
+                // First convert percentages to indices in branch_transforms
+                let total_transforms = branch_transforms.len();
+                
+                // Ensure we have at least one transform to work with
+                if total_transforms == 0 {
+                    continue; // Skip this child if no transforms are available
+                }
+                
+                // Calculate the index range based on the percentage values
+                let min_index = ((config.min_branch_pos_pct / 100.0) * (total_transforms as f32)).floor() as usize;
+                let max_index = ((config.max_branch_pos_pct / 100.0) * (total_transforms as f32)).ceil() as usize;
+                
+                // Ensure indices are within valid bounds
+                let min_index = min_index.clamp(0, total_transforms - 1);
+                let max_index = max_index.clamp(min_index + 1, total_transforms);
+                
+                // Select transforms within the specified percentage range
+                let valid_transforms = &branch_transforms[min_index..max_index.min(total_transforms)];
+                
+                // If no valid transforms after applying percentage constraints, skip this child
+                if valid_transforms.is_empty() {
+                    continue;
+                }
                 
                 let random_index = generator.rng.gen_range(0..valid_transforms.len());
                 let random_transform = &valid_transforms[random_index];

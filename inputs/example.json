@@ -1,6 +1,4 @@
 {
-  "seed": 12345,
-  "type": "Deciduous",
   "bark": {
     "type": "Oak",
     "tint": 16777215,
@@ -22,6 +20,8 @@
     "gnarliness": 0.1,
     "minRotation": 15.0,
     "maxRotation": 0.0,
+    "minBranchPosPct": 20.0,
+    "maxBranchPosPct": 80.0,
     "children": 4,
     "children_config": {
       "length": 3.5,
@@ -34,6 +34,8 @@
       "gnarliness": 0.0,
       "minRotation": 20.0,
       "maxRotation": 40.0,
+      "minBranchPosPct": 30.0,
+      "maxBranchPosPct": 70.0,
       "children": 3,
       "children_config": {
         "length": 2.0,
@@ -46,6 +48,8 @@
         "gnarliness": 0.0,
         "minRotation": 25.0,
         "maxRotation": 45.0,
+        "minBranchPosPct": 40.0,
+        "maxBranchPosPct": 60.0,
         "children": 2,
         "children_config": {
           "length": 1.0,
@@ -58,6 +62,8 @@
           "gnarliness": 0.0,
           "minRotation": 30.0,
           "maxRotation": 50.0,
+          "minBranchPosPct": 20.0,
+          "maxBranchPosPct": 80.0,
           "children": 0
         }
       }
