@@ -241,7 +241,7 @@ fn generate_branch_hierarchy(
         config.length_segments as usize,    // Number of segments
         config.length / config.length_segments as f32,  // Segment length
         config.gnarliness * 0.2,     // Curvature strength
-        18.1,//config.twist * 0.01,         // Curvature variation
+        config.twist,         // Curvature variation
         Some(generator.rng.gen())    // Random seed
     );
     
@@ -326,18 +326,6 @@ fn generate_branch_hierarchy(
             
             // Create each child branch based on the number specified
             for i in 0..config.children {
-                // Calculate angle for this branch (distribute around parent)
-                let angle_radians = 2.0 * std::f32::consts::PI * (i as f32 / config.children as f32);
-                
-                // Calculate position relative to parent branch end
-                let parent_end = Point3::new(
-                    position.x,
-                    position.y + config.length/2.0,
-                    position.z
-                );
-                
-                // Apply the branch angle to create an offset direction
-                let branch_angle_rad = config.angle * std::f32::consts::PI / 180.0;
                 
                 // Select a random position along the parent branch for the child
                 // Skip the first transform (base) and avoid the very tip for stability
